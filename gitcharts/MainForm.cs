@@ -22,6 +22,8 @@ namespace gitcharts
             git g = new git(textBox1.Text);
             Image i = g.CreateChartLOC();
             i.Save("chart.png", ImageFormat.Png);
+            BackgroundImage = i;
+            BackgroundImageLayout = ImageLayout.None;
             button1.Text = "saved";
         }
     }
