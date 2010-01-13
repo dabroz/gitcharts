@@ -20,6 +20,7 @@ namespace gitcharts
         private void button1_Click(object sender, EventArgs e)
         {
             git g = new git(textBox1.Text);
+            g.SetSize(int.Parse(cWidth.Text), int.Parse(cHeight.Text));
             Image i = g.CreateChartLOC();
             i.Save("chart.png", ImageFormat.Png);
             BackgroundImage = i;

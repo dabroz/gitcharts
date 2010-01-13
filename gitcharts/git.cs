@@ -98,8 +98,8 @@ namespace gitcharts
         }
         private Image CreateGraph(List<GitNode> nodes)
         {
-            int width = 1650;
-            int height = 980;
+            int width = size.Width;
+            int height = size.Height;
             int marginR = 60;
             int marginB = 90;
 
@@ -203,8 +203,8 @@ namespace gitcharts
 
                     g.FillRectangle(new SolidBrush(Color.FromArgb(170, Color.Black)), wecci - 150, hecci - (float)yy - 15, 140, 30);
 
-                    var size = g.MeasureString(q.Key, ffx);
-                    g.DrawString(q.Key, ffx, Brushes.White, wecci - 80 - size.Width/2, hecci - (float)yy-10);
+                    var qsize = g.MeasureString(q.Key, ffx);
+                    g.DrawString(q.Key, ffx, Brushes.White, wecci - 80 - qsize.Width/2, hecci - (float)yy-10);
 
                     ff += q.Value;
                 }
@@ -335,6 +335,11 @@ namespace gitcharts
             DateTime dateTime = new System.DateTime(1970, 1, 1, 0, 0, 0, 0);
             dateTime = dateTime.AddSeconds(double.Parse(p));
             return dateTime;
+        }
+        Size size;
+        public void SetSize(int w, int h)
+        {
+            size = new Size(w, h);
         }
     }
 }
