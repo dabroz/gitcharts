@@ -7,13 +7,17 @@ Example screenshot:
 
 [![Screenshot](http://dabroz.scythe.pl/upload/2010/10/chart2.jpg)](http://dabroz.scythe.pl/upload/2010/10/chart2.jpg) 
 
-Changelog:
+Changelog
+---------
 
-0.2: - moved from custom graph "library" to GNUPLOT (I was also expertimenting with ZedGraph)
-     - two-level directories
-     - more customization options available
+*0.2:*
 
-Roadmap:
+* moved from custom graph "library" to GNUPLOT (I was also expertimenting with ZedGraph)
+* two-level directories
+* more customization options available
+
+Roadmap
+-------
 
 0.2: few fixes needed (mostly chart related)
 0.3: caching
