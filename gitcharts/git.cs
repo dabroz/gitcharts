@@ -10,11 +10,13 @@ using System.Drawing.Drawing2D;
 
 namespace gitcharts
 {
-    class git
+    class Git
     {
-        static string SendGitCommand(string cmd, string directory)
+        string SendGitCommand(string cmd, string directory)
         {
-            ProcessStartInfo psi = new ProcessStartInfo("git", cmd);
+            Log("GIT: git {0}", cmd);
+
+            ProcessStartInfo psi = new ProcessStartInfo(Settings.Instance.GitCommand, cmd);
             psi.RedirectStandardOutput = true;
             psi.RedirectStandardError = true;
             psi.WorkingDirectory = directory;
@@ -34,16 +36,27 @@ namespace gitcharts
 
         string url;
 
-        public git(string url_)
+        public Git(string url_)
         {
-            url = url_;       
+            url = url_;
         }
 
-        public static string GitVersion { get { return SendGitCommand("version", "."); } }
+        public string GitVersion { get { return SendGitCommand("version", "."); } }
 
-        void Log(string s, params object[] p)
+        static StreamWriter swq = null;
+
+        public static void Log(string s, params object[] p)
         {
-            System.Diagnostics.Debug.WriteLine(string.Format(s, p));
+             if (swq == null)
+             {
+                 var q = DateTime.Now;
+                 var fname = string.Format("Log_{0}.txt", ConvertToTimestamp(q).ToString());
+                 swq = new StreamWriter(fname);
+             }
+            var txt = string.Format(s, p);
+            swq.WriteLine(txt);
+            swq.Flush();
+            System.Diagnostics.Debug.WriteLine(txt);
         }
 
         class GitNode
@@ -56,28 +69,27 @@ namespace gitcharts
         {
             Log("Git version: {0}", GitVersion);
 
-            var dir = "gittemp" + DateTime.Now.ToBinary().ToString();
-            Directory.CreateDirectory(dir);
+            var dir = url;
 
-            Log("clone(): {0}", SendGitCommand("clone " + url, dir));
-
-            dir += "\\" + new DirectoryInfo(dir).GetDirectories()[0].Name;
+            var rere = SendGitCommand("checkout master", dir);
+            Log("reset: {0}", rere);
 
             List<GitNode> nodes = new List<GitNode>();
 
             int count = 0;
 
+            int limit = Settings.Instance.RevisionLimit;
+
             while (true)
             {
                 DateTime time = GetDateTime(SendGitCommand("log -n 1 --pretty=format:%at", dir));
 
-                var size = CalculateLOC(dir);
+                var size = CalculateLOC(dir,"");
 
                 nodes.Add(new GitNode() { loc = size, time = time });
 
                 count++;
                 Log("Reading: {0}", count);
-               // if (count > 20) break;
 
                 var prev = SendGitCommand("checkout HEAD^", dir);
 
@@ -85,23 +97,32 @@ namespace gitcharts
                 {
                     break;
                 }
+                if (--limit < 0) break;
             }
 
             return CreateGraph(nodes);
         }
 
-        private double ConvertToTimestamp(DateTime value)
+        private static double ConvertToTimestamp(DateTime value)
         {
             TimeSpan span = (value - new DateTime(1970, 1, 1, 0, 0, 0, 0));
             return (double)span.TotalSeconds;
-
+        }
+        private static DateTime ConvertFromTimestamp(double v)
+        {
+            DateTime date = new DateTime(1970, 1, 1, 0, 0, 0, 0);
+            TimeSpan span = new TimeSpan(0, 0, 0, (int)v);
+            return date + span;
         }
         private Image CreateGraph(List<GitNode> nodes)
         {
+            StreamWriter sw = new StreamWriter("graph.txt");
+            /*Color[] colors = { Color.Red, Color.Green, Color.Blue, Color.Purple, Color.Cyan, Color.DarkRed, Color.Olive,
+                                     Color.DarkBlue, Color.SeaShell, Color.DarkGreen, Color.Yellow, Color.DimGray,
+                                 Color.Chocolate, Color.Orange, Color.DeepSkyBlue, Color.Salmon,Color.DarkCyan,Color.DeepPink};*/
+
             int width = size.Width;
             int height = size.Height;
-            int marginR = 60;
-            int marginB = 90;
 
             DateTime min = nodes.Min(p => p.time);
             DateTime max = nodes.Max(p => p.time);
@@ -109,7 +130,7 @@ namespace gitcharts
             double timeW = ConvertToTimestamp(max) - ConvertToTimestamp(min);
             double timeL = ConvertToTimestamp(min);
 
-            long maxloc = nodes.Max(p => p.loc.Sum(q => q.Value));
+            int maxloc = (int)nodes.Max(p => p.loc.Sum(q => q.Value));
 
             UpdateEmptyNodes(nodes);
 
@@ -117,150 +138,22 @@ namespace gitcharts
 
             Log("History from {0} to {1}, max LOC = {2}", min, max, maxloc);
 
-            double hecc = height - marginB; int hecci = (int)hecc;
-            double wecc = width - marginR; int wecci = (int)wecc;
-
-            int count = 0;
-
-            Bitmap bmp = new Bitmap(width, height);
-            using (Graphics g = Graphics.FromImage(bmp))
+            foreach (var entry in nodes)
             {
-                g.Clear(Color.White);
-                //g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                //g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-
-                bool first = true;
-                GitNode prev = null;
-                //Dictionary<string, float> last;
-
-                Color[] colors = { Color.Red, Color.Green, Color.Blue, Color.Purple, Color.Cyan, Color.DarkRed, Color.Olive,
-                                     Color.DarkBlue, Color.SeaShell, Color.DarkGreen, Color.Yellow, Color.DimGray,
-                                 Color.Chocolate, Color.Orange, Color.DeepSkyBlue, Color.Salmon,Color.DarkCyan,Color.DeepPink};
-
-                DrawNodesPolygons(nodes, timeW, timeL, maxloc, hecc, hecci, wecc, ref count, g, ref first, ref prev, colors);
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.DrawLine(new Pen(Color.Black, 3), 0, height - marginB, width - marginR, height - marginB);
-                g.DrawLine(new Pen(Color.Black, 3), width - marginR, 0, width - marginR, height - marginB);
-
-                int timespace = 80;
-                int timecount = (int)(Math.Floor((float)wecci / (float)timespace));
-                timespace = wecci / timecount;
-
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-                g.SmoothingMode = SmoothingMode.HighQuality;
-         
-                int tx = 0;
-                var pen = new Pen(new SolidBrush(Color.FromArgb(50, Color.Gray)), 1);
-                pen.DashStyle = DashStyle.Dash;
-                for (int i = 0; i <= timecount; i++)
+                double xx = (ConvertToTimestamp(entry.time) - timeL) / timeW;
+                double sum = 0;
+                sw.Write(xx.ToString());
+                sw.Write(" 0 ");
+                foreach (var module in entry.loc)
                 {
-                    double tim = timeL + timeW * (float)i / (float)timecount;
-                    var timm = GetDateTime(tim.ToString());
-                    var ct = g.Transform;
-                    g.TranslateTransform(tx+16, hecci);
-                    g.RotateTransform(90);                    
-                    g.DrawString(timm.ToShortDateString(), new Font("Arial", 12, FontStyle.Regular), Brushes.Black, new PointF(0, 0));
-                    g.Transform=ct;
-
-                    if (i!=0 && i!=timecount)
-                    {
-                        g.DrawLine(pen, tx, 0, tx, hecci);
-                    }
-
-                    tx += timespace;
+                    sum += module.Value;
+                    sw.Write(sum.ToString() + " ");
                 }
-
-                int locspace = 80;
-                int loccount = (int)(Math.Ceiling((float)hecci / (float)locspace));
-                locspace = hecci / loccount;
-
-                int ty = 0;
-
-                for (int i = 0; i <= loccount; i++)
-                {
-                    float z = (float)maxloc * (1.0f - (float)i / (float)loccount);
-                    string xx = ((int)(z)).ToString();
-                    g.DrawString(xx, new Font("Arial", 12, FontStyle.Regular), Brushes.Black, new PointF(wecci, ty));
-
-                    if (i != 0 && i != loccount)
-                    {
-                        g.DrawLine(pen, 0, ty, wecci, ty);
-                    }
-
-                    ty += locspace;
-                }
-
-                long ff = 0;
-                var ffx = new Font("Arial", 12, FontStyle.Bold);
-                foreach (var q in prev.loc)
-                {
-                    long y1 = ff;
-                    long y2 = ff + q.Value;
-                    long y = (y1 + y2) / 2;
-
-                    double yy = (float)y / (float)maxloc;
-                    yy *= hecc;
-
-                    g.FillRectangle(new SolidBrush(Color.FromArgb(170, Color.Black)), wecci - 150, hecci - (float)yy - 15, 140, 30);
-
-                    var qsize = g.MeasureString(q.Key, ffx);
-                    g.DrawString(q.Key, ffx, Brushes.White, wecci - 80 - qsize.Width/2, hecci - (float)yy-10);
-
-                    ff += q.Value;
-                }
+                sw.WriteLine();
             }
+            sw.Close();
 
-            return bmp;
-        }
-
-        private void DrawNodesPolygons(List<GitNode> nodes, double timeW, double timeL, long maxloc, double hecc, int hecci, double wecc, ref int count, Graphics g, ref bool first, ref GitNode prev, Color[] colors)
-        {
-            foreach (var n in nodes)
-            {
-                if (!first)
-                {
-                    double px1 = ConvertToTimestamp(prev.time) - timeL;
-                    double px2 = ConvertToTimestamp(n.time) - timeL;
-                    px1 /= timeW;
-                    px2 /= timeW;
-                    int x1 = (int)(wecc * px1);
-                    int x2 = (int)(wecc * px2);
-                    int y1 = 0, y2 = 0;
-                    int i = 0;
-                    foreach (var m in n.loc)
-                    {
-                        long m1 = prev.loc[m.Key];
-                        long m2 = m.Value;
-
-                        double p1 = (double)m1 / (double)maxloc;
-                        double p2 = (double)m2 / (double)maxloc;
-
-                        int u1 = (int)(p1 * hecc);
-                        int u2 = (int)(p2 * hecc);
-
-                        u1 += y1;
-                        u2 += y2;
-                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
-                        g.FillPolygon(new SolidBrush(colors[i]), new Point[]
-                            {
-                                new Point(x1, hecci-y1), new Point(x1,hecci-u1),new Point(x2,hecci-u2), new Point(x2,hecci-y2)
-                            });
-                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                        g.DrawLine(new Pen(colors[i], 3), x1, hecci - y1, x2, hecci - y2);
-                        g.DrawLine(new Pen(colors[i], 3), x1, hecci - u1, x2, hecci - u2);
-
-                        y1 = u1;
-                        y2 = u2;
-                        i++;
-                    }
-                }
-
-                first = false;
-                prev = n;
-
-                count++;
-                Log("Drawing: {0}", count);
-            }
+            return Graph.Plot(nodes.First().loc.Keys.ToList(), "graph.txt", size.Width, size.Height, maxloc);
         }
 
         private void UpdateEmptyNodes(List<GitNode> nodes)
@@ -285,18 +178,45 @@ namespace gitcharts
             }
         }
 
-        private SortedDictionary<string, long> CalculateLOC(string dir)
+        List<string> _ignoredDirs = null;
+        List<string> _twolevelDirs = null;
+
+        private SortedDictionary<string, long> CalculateLOC(string dir, string app)
         {
+            if (_ignoredDirs == null)
+            {
+                _ignoredDirs = ("QWERTYUIOPASDGFHJKLZXCVBNM;" + Settings.Instance.Ignore.Trim(';')).Split(';').ToList();
+                _twolevelDirs = ("QWERTYUIOPASDGFHJKLZXCVBNM;" + Settings.Instance.TwoLevels.Trim(';')).Split(';').ToList();
+            }
             SortedDictionary<string, long> ret = new SortedDictionary<string, long>();
 
-            foreach (var d in new DirectoryInfo(dir).GetDirectories())
+            var root = new DirectoryInfo(dir);
+            foreach (var d in root.GetDirectories())
             {
-                if (!d.Name.Contains(".git") && !d.Name.Contains("Includes") && !d.Name.Contains("Libs") && !d.Name.Contains("Build"))
+                bool ignored = _ignoredDirs.Contains(d.Name);
+                bool twolevel = _twolevelDirs.Contains(d.Name);
+                if (!ignored)
                 {
-                    ret.Add(d.Name, CalculateSize(d.FullName));
+                    if (twolevel)
+                    {
+                        foreach (var q in CalculateLOC(dir + "\\" + d.Name, d.Name + "\\"))
+                        {
+                            ret.Add(q.Key, q.Value);
+                        }
+                    }
+                    else
+                    {
+                        ret.Add(app + d.Name, CalculateSize(d.FullName));
+                    }
                 }
             }
-
+            if (app == "")
+            {
+                foreach (var q in ret)
+                {
+                    Log("* {0}: {1}", q.Key, q.Value);
+                }
+            }
             return ret;
         }
 
@@ -323,11 +243,15 @@ namespace gitcharts
             return s.Split('\n').Length;
         }
 
+        private List<string> allowedExt = null;
         private bool IsIncluded(string p)
         {
-            string[] allowed = { "c", "h", "cpp", "m", "mm", "cg","cs","res" };
+            if (allowedExt == null)
+            {
+                allowedExt = Settings.Instance.AllowedFiles.Split(',').ToList();
+            }
             if (p.Length < 2) return false;
-            return allowed.Contains(p.Substring(1));
+            return allowedExt.Contains(p.Substring(1));
         }
 
         private DateTime GetDateTime(string p)
@@ -339,7 +263,7 @@ namespace gitcharts
         Size size;
         public void SetSize(int w, int h)
         {
-            size = new Size(w, h);
+            size = new Size(w, h);            
         }
     }
 }

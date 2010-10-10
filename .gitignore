@@ -1,0 +1,5 @@
+bin
+*.pdb
+*.exe
+*.suo
+obj
