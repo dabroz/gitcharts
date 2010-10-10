@@ -19,6 +19,6 @@ Changelog
 Roadmap
 -------
 
-0.2: few fixes needed (mostly chart related)
-0.3: caching
-1.0: rewrite gitcharts into portable ANSI C instead of C#
+* 0.2: few fixes needed (mostly chart related)
+* 0.3: caching
+* 1.0: rewrite gitcharts into portable ANSI C instead of C#
